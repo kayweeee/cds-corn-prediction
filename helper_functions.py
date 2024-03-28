@@ -143,7 +143,8 @@ def filter_year(year_range, img, nband, dates_of_images):
     year_list = sorted(years.keys())
     
     if np.all(year_range[0] not in year_list or year_range[1] not in year_list):
-        raise(ValueError('The given year is out of bound for the given set of image.'))
+        print("Available years:", year_list)
+        raise(ValueError(f'The given year is out of bound for the given set of image.'))
         
     start = year_dim[year_list.index(year_range[0])][0]
     stop = year_dim[year_list.index(year_range[1])][1] #<-- compensate for the -1 earlier
@@ -203,7 +204,8 @@ def plt_img_dist(file_dir, nband, nsample, yield_dataframe):
     Image is in a form of npy format. 
     """
     
-    fips = yield_dataframe[['YEAR', 'STATE_FIPS', 'COUNTY_FIPS']][yield_dataframe['YEAR'] >= 2010].values
+    fips = yield_dataframe[['YEAR', 'STATE_FIPS', 'COUNTY_FIPS']][yield_dataframe['YEAR'] >= 2018].values
+    print(fips)
     rand_idx = random.sample(range(0, len(fips)), nsample)
     data = {band:[] for band in range(0, nband)}
     for i, _ in enumerate(tqdm(fips[rand_idx])):
