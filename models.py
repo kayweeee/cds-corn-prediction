@@ -1,179 +1,185 @@
-from keras.models import Model, Sequential, load_model
-from keras.optimizers import Nadam, SGD, Adam
-from keras.layers import Conv2D, MaxPooling2D, Input, Conv1D, MaxPooling3D, Conv3D, ConvLSTM2D, LSTM, AveragePooling2D
-from keras.layers import Input, LSTM, Embedding, Dense, LeakyReLU, Flatten, Dropout, SeparableConv2D, GlobalAveragePooling3D
-from keras.layers import TimeDistributed, BatchNormalization
-from keras import optimizers
-from keras.callbacks import EarlyStopping
-from keras import regularizers
+import torch
+import torch.nn as nn
 
-class ResearchModels():
-    def __init__(self, model, frames, dimensions, saved_model=None, print_model=False):
-        """
-        `model` = one of:
-            lstm
-            lrcn
-            mlp
-            conv_3d
-            c3d
-        `frames` = the number of frames of satelite images in a year
-        `dimensions` = the dimensions of the picture (channel last)
-        `saved_model` = the path to a saved Keras model to load
-        """
+class CNN_LSTM(nn.Module):
+    def __init__(self, dimensions):
+        super(CNN_LSTM, self).__init__()
+        self.dimensions = dimensions
+        self.vision_model = nn.Sequential(
+            nn.Conv2d(dimensions[1], 64, kernel_size=(1, 2), padding='same'),  # Adjust input channels based on dimensions
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+            nn.MaxPool2d((1, 2)),
+        )
+        self.flatten = nn.Flatten()
+        self.encoded_frame_sequence = nn.Sequential(
+            nn.Linear(2 * 64 * (dimensions[2] // 2) * (dimensions[3] // 2), 608),  # Adjust the linear layer input size
+            nn.ReLU(),
+            nn.BatchNorm1d(608)
+        )
+        self.encoded_video = nn.LSTM(608, 608, batch_first=True)
+        self.fc2 = nn.Sequential(
+            nn.Linear(608, 64),
+            nn.ReLU(),
+            nn.BatchNorm1d(64)
+        )
+        self.out = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(64, 1),
+            nn.ReLU()
+        )
+
+    def forward(self, x):
+        # Reshape input for CNN
+        batch_size, seq_len, channels, height, width = x.size()
+        x = x.view(batch_size * seq_len, channels, height, width)
+
+        x = self.vision_model(x)
+        x = self.flatten(x)
+        x = self.encoded_frame_sequence(x)
         
-        # Set defaults.
-        self.frames = frames
-        self.saved_model = saved_model
-        self.image_dim = tuple(dimensions)
-        self.input_shape = (frames, ) + tuple(dimensions)
-        self.print_model = print_model
-
-        print("input shape", self.input_shape)
-
-        # Set the metrics. Only use top k if there's a need.
-        metrics = ['mean_absolute_error']
-
-        # Get the appropriate model.
-        if self.saved_model is not None:
-            print("Loading model %s" % self.saved_model)
-            self.model = load_model(self.saved_model)
-        	
-        elif model == 'CNN_LSTM':
-            print("Loading Model.")
-            self.model = self.CNN_LSTM()
-        elif model == 'SepCNN_LSTM':
-            print("Loading Model.")
-            self.model = self.SepCNN_LSTM()
-        elif model == 'CONVLSTM':
-            print("Loading Model.")
-            self.model = self.CONVLSTM()
-        elif model == 'CONV3D':
-            print("Loading Model")
-            self.model = self.CONV3D()
-        elif model == 'CONVLSTM_CONV3D':
-            print("Loading Model")
-            self.model = self.CONVLSTM_CONV3D()
-        else:
-            print("Unknown network.")
-            sys.exit()
-			
-        # Now compile the network.
-        optimizer = Adam()
-        self.model.compile(loss='mse', optimizer=optimizer, metrics=metrics)
-		
-        if self.print_model == True:
-            print(self.model.summary())
-                           
-                           
-    def CNN_LSTM(self):
-
-        frames_input = Input(shape=self.input_shape, batch_size=16)
-        vision_model = Sequential()
-        vision_model.add(Conv2D(64, (1, 2), activation='relu', padding='same', input_shape=self.image_dim))
-        vision_model.add(BatchNormalization())
-        vision_model.add(MaxPooling2D((1, 2)))
-        vision_model.add(Flatten())
-        vision_model.add(BatchNormalization())
-        # encoded_frame_sequence = TimeDistributed(vision_model)(frames_input) # the output will be a sequence of vectors
-               # Apply TimeDistributed layer
-        print("Frames Input Shape:", frames_input.shape)
-        encoded_frame_sequence = TimeDistributed(vision_model)(frames_input)
-        print("Encoded Frame Sequence Shape:", encoded_frame_sequence.shape)
-
-        encoded_video = LSTM(256, activation='tanh', return_sequences=True)(encoded_frame_sequence)  # the output will be a vector
+        # Reshape for LSTM
+        x = x.view(batch_size, seq_len, -1)
+        x, _ = self.encoded_video(x)
         
-        fc2 = Dense(64, activation='relu', kernel_regularizer=regularizers.l2(0.05))(encoded_video)
-        out = Flatten()(fc2)
-        out = Dropout(0.5)(out)
-        output = Dense(1, activation='relu')(out)
-        CNN_LSTM = Model(inputs=frames_input, outputs=output)
-        return CNN_LSTM
-	
-	
-    def SepCNN_LSTM(self):
-
-        frames_input = Input(shape=self.input_shape)
+        # Take the last LSTM output
+        x = x[:, -1, :]
         
-        vision_model = Sequential()
-        vision_model.add(SeparableConv2D(64, (1, 2), activation='relu', padding='same', input_shape=self.image_dim))
-        vision_model.add(BatchNormalization())
-        vision_model.add(MaxPooling2D((1, 2)))
-        vision_model.add(Flatten())
-        vision_model.add(BatchNormalization())
-        encoded_frame_sequence = TimeDistributed(vision_model)(frames_input) # the output will be a sequence of vectors
-        encoded_video = LSTM(256, activation='tanh', return_sequences=True)(encoded_frame_sequence)  # the output will be a vector
+        x = self.fc2(x)
+        x = self.out(x)
+        return x
+
+
+
+# def SepCNN_LSTM(frames, dimensions):
+#     class SepCNN_LSTM(nn.Module):
+#         def __init__(self):
+#             super(SepCNN_LSTM, self).__init__()
+#             self.vision_model = nn.Sequential(
+#                 nn.Conv2d(dimensions[0], 64, kernel_size=(1, 2), padding='same'),
+#                 nn.ReLU(),
+#                 nn.BatchNorm2d(64),
+#                 nn.MaxPool2d((1, 2)),
+#                 nn.Flatten(),
+#                 nn.BatchNorm1d(64)
+#             )
+#             self.encoded_frame_sequence = nn.Sequential(
+#                 nn.Linear(64 * dimensions[1], 256),
+#                 nn.ReLU(),
+#                 nn.BatchNorm1d(256)
+#             )
+#             self.encoded_video = nn.LSTM(256, 256, batch_first=True)
+#             self.fc2 = nn.Sequential(
+#                 nn.Linear(256, 64),
+#                 nn.ReLU(),
+#                 nn.BatchNorm1d(64)
+#             )
+#             self.out = nn.Sequential(
+#                 nn.Dropout(0.5),
+#                 nn.Linear(64, 1),
+#                 nn.ReLU()
+#             )
+
+#         def forward(self, x):
+#             x = self.vision_model(x)
+#             x = x.view(-1, frames, 64 * dimensions[1])
+#             x = self.encoded_frame_sequence(x)
+#             x, _ = self.encoded_video(x)
+#             x = self.fc2(x[:, -1, :])
+#             x = self.out(x)
+#             return x
+
+#     return SepCNN_LSTM()
+
+# def CONVLSTM(frames, dimensions):
+#     class CONVLSTM(nn.Module):
+#         def __init__(self):
+#             super(CONVLSTM, self).__init__()
+#             self.conv_lstm = nn.Sequential(
+#                 nn.ConvLSTM2d(dimensions[0], 64, kernel_size=(1, 2), padding='same'),
+#                 nn.ReLU(),
+#                 nn.BatchNorm2d(64),
+#                 nn.ConvLSTM2d(64, 32, kernel_size=(1, 2), padding='same'),
+#                 nn.ReLU(),
+#                 nn.BatchNorm2d(32),
+#                 nn.ConvLSTM2d(32, 32, kernel_size=(1, 2), padding='same'),
+#                 nn.ReLU(),
+#                 nn.BatchNorm2d(32),
+#                 nn.Flatten(),
+#                 nn.BatchNorm1d(32)
+#             )
+#             self.fc = nn.Sequential(
+#                 nn.Linear(32, 32),
+#                 nn.ReLU(),
+#                 nn.Dropout(0.5),
+#                 nn.Linear(32, 1),
+#                 nn.ReLU()
+#             )
+
+#         def forward(self, x):
+#             x = self.conv_lstm(x)
+#             x = self.fc(x)
+#             return x
+
+#     return CONVLSTM()
+
+# def CONV3D(frames, dimensions):
+#     class CONV3D(nn.Module):
+#         def __init__(self):
+#             super(CONV3D, self).__init__()
+#             self.conv3d = nn.Sequential(
+#                 nn.Conv3d(dimensions[0], 64, kernel_size=(1, 2, 1), padding='same'),
+#                 nn.ReLU(),
+#                 nn.Conv3d(64, 32, kernel_size=(1, 2, 1), padding='same'),
+#                 nn.ReLU(),
+#                 nn.Conv3d(32, 32, kernel_size=(1, 2, 1), padding='same'),
+#                 nn.ReLU(),
+#                 nn.MaxPool3d((2, 1, 1), stride=(1, 1, 1)),
+#                 nn.BatchNorm3d(32),
+#                 nn.Flatten()
+#             )
+#             self.fc = nn.Sequential(
+#                 nn.Linear(32, 32),
+#                 nn.ReLU(),
+#                 nn.Dropout(0.5),
+#                 nn.Linear(32, 1),
+#                 nn.ReLU()
+#             )
+
+#         def forward(self, x):
+#             x = self.conv3d(x)
+#             x = self.fc(x)
+#             return x
+
+#     return CONV3D()
+
+# def CONVLSTM_CONV3D(frames, dimensions):
+#     class CONVLSTM_CONV3D(nn.Module):
+#         def __init__(self):
+#             super(CONVLSTM_CONV3D, self).__init__()
+#             self.conv_lstm1 = nn.ConvLSTM2d(dimensions[0], 64, kernel_size=(1, 2), padding='same', return_sequences=True)
+#             self.conv_lstm2 = nn.ConvLSTM2d(64, 32, kernel_size=(1, 2), padding='same', return_sequences=True)
+#             self.conv3d = nn.Conv3d(32, 32, kernel_size=(1, 1, 2), padding='same')
+#             self.maxpool3d = nn.MaxPool3d(kernel_size=(1, 1, 2))
+#             self.flatten = nn.Flatten()
+#             self.batchnorm = nn.BatchNorm1d(32)
+#             self.fc1 = nn.Linear(32, 64)
+#             self.relu = nn.ReLU()
+#             self.dropout = nn.Dropout(0.5)
+#             self.fc2 = nn.Linear(64, 1)
         
-        fc2 = Dense(64, activation='relu', kernel_regularizer=regularizers.l2(0.05))(encoded_video)
-        out = Flatten()(fc2)
-        out = Dropout(0.5)(out)
-        output = Dense(1, activation='relu')(out)
-        CNN_LSTM = Model(inputs=frames_input, outputs=output)
-        
-        return CNN_LSTM
-	
-	
-    def CONVLSTM(self):
+#         def forward(self, x):
+#             x = self.conv_lstm1(x)
+#             x = self.conv_lstm2(x)
+#             x = self.conv3d(x)
+#             x = self.maxpool3d(x)
+#             x = self.flatten(x)
+#             x = self.batchnorm(x)
+#             x = self.fc1(x)
+#             x = self.relu(x)
+#             x = self.dropout(x)
+#             x = self.fc2(x)
+#             x = self.relu(x)
+#             return x
 
-        CONVLSTM = Sequential()
-        CONVLSTM.add(ConvLSTM2D(filters=64, kernel_size=(1, 2),
-                   input_shape=self.input_shape,
-                   padding='same', return_sequences=True,
-                   activation='relu'))
-        CONVLSTM.add(ConvLSTM2D(filters=32, kernel_size=(1, 2),
-                   padding='same', return_sequences=True,
-                   activation='relu'))
-        CONVLSTM.add(ConvLSTM2D(filters=32, kernel_size=(1, 2),
-                   padding='same', return_sequences=True,
-                   activation='relu'))
-        CONVLSTM.add(BatchNormalization())
-        CONVLSTM.add(Flatten())
-
-        CONVLSTM.add(Dense(32, activation='relu'))
-        CONVLSTM.add(Dropout(0.5))
-        CONVLSTM.add(Dense(1, activation='relu'))
-		
-        return CONVLSTM
-	
-    def CONV3D(self):
-
-        CONV3D = Sequential()
-        CONV3D.add(Conv3D(filters=64, kernel_size=(1, 2, 1), input_shape=self.input_shape,
-                   padding='same', activation='relu'))
-        CONV3D.add(Conv3D(filters=32, kernel_size=(1, 2, 1),
-                   padding='same', activation='relu'))
-        CONV3D.add(Conv3D(filters=32, kernel_size=(1, 2, 1),
-                   padding='same', activation='relu'))
-
-        CONV3D.add(MaxPooling3D(pool_size=(2, 1, 1), strides=(1, 1, 1),
-                        border_mode='valid'))
-    
-        CONV3D.add(BatchNormalization())
-        CONV3D.add(Flatten())
-
-        CONV3D.add(Dense(32, activation='relu'))
-        CONV3D.add(Dropout(0.5))
-        CONV3D.add(Dense(1, activation='relu'))
-
-        return CONV3D
-
-    def CONVLSTM_CONV3D(self):	
-        
-        CONVLSTM_CON3D = Sequential()
-        CONVLSTM_CON3D.add(ConvLSTM2D(filters=64, kernel_size=(1, 2),
-                   input_shape=self.input_shape,
-                   padding='same', return_sequences=True,
-                   activation='relu'))
-        CONVLSTM_CON3D.add(ConvLSTM2D(filters=32, kernel_size=(1, 2),
-                   padding='same', return_sequences=True,
-                   activation='relu'))
-        CONVLSTM_CON3D.add(Conv3D(filters=32, kernel_size=(1, 1, 2),
-                   padding='same', activation='relu'))
-        CONVLSTM_CON3D.add(MaxPooling3D(pool_size=(1, 1, 2)))
-        CONVLSTM_CON3D.add(Flatten())
-        CONVLSTM_CON3D.add(BatchNormalization())
-
-        CONVLSTM_CON3D.add(Dense(64, activation='relu'))
-        CONVLSTM_CON3D.add(Dropout(0.5))
-        CONVLSTM_CON3D.add(Dense(1, activation='relu'))
-        
-        return CONVLSTM_CON3D
+#     return CONVLSTM_CONV3D()
