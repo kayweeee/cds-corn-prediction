@@ -127,7 +127,6 @@ def get_year_dim(years, nband):
 
     year_list = sorted(years.keys())
     dimensions = [[years[year]*nband*year_list.index(year), years[year]*nband*year_list.index(year) + years[year]*nband] for year in years]
-    
     return dimensions 
 
 
