@@ -156,3 +156,37 @@ class ConvGRU_LSTM(nn.Module):
         x = self.out(x)
         return x
 
+## BASELINE MODELS
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error
+from sklearn.linear_model import Lasso
+
+class RandomForestBaseline:
+    def __init__(self, n_estimators=100, max_depth=None, random_state=None):
+        self.model = RandomForestRegressor(n_estimators=n_estimators, max_depth=max_depth, random_state=random_state, criterion='squared_error')
+
+    def fit(self, X_train, y_train):
+        self.model.fit(X_train, y_train)
+
+    def predict(self, X_test):
+        return self.model.predict(X_test)
+
+    def evaluate(self, X_test, y_test):
+        predictions = self.predict(X_test)
+        mse = mean_squared_error(y_test, predictions)
+        return mse
+    
+class LassoModel:
+    def __init__(self, alpha=0.1, random_state=None):
+        self.model = Lasso(alpha=alpha, random_state=random_state)
+
+    def fit(self, X_train, y_train):
+        self.model.fit(X_train, y_train)
+
+    def predict(self, X_test):
+        return self.model.predict(X_test)
+
+    def evaluate(self, X_test, y_test):
+        y_pred = self.predict(X_test)
+        mse = mean_squared_error(y_test, y_pred)
+        return mse
