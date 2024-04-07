@@ -93,6 +93,7 @@ class SepCNN_LSTM(nn.Module):
         x = self.out(x)
         return x
 
+# to be used in ConvGRU_LSTM
 class ConvGRU(nn.Module):
     def __init__(self, input_size, hidden_size, kernel_size):
         super(ConvGRU, self).__init__()
