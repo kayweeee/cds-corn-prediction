@@ -16,10 +16,10 @@ All files from this point will take the Satellite Yield Prediction folder as the
 
 ## Data Sources        
 Satellite images were taken from Google Earth Engine. The specific satellite datasets used in this project are listed below:       
-• [USDA NASS Cropland Data Layers] (https://developers.google.com/earth-engine/datasets/catalog/USDA_NASS_CDL#bands)
-• [MYD11A2.061 Aqua Land Surface Temperature and Emissivity 8-Day Global 1km] (https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MYD11A2)
-• [MOD09A1.061 Terra Surface Reflectance 8-Day Global 500m] (https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD09A1)
-
+• [USDA NASS Cropland Data Layers] (https://developers.google.com/earth-engine/datasets/catalog/USDA_NASS_CDL#bands)            
+• [MYD11A2.061 Aqua Land Surface Temperature and Emissivity 8-Day Global 1km] (https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MYD11A2)            
+• [MOD09A1.061 Terra Surface Reflectance 8-Day Global 500m] (https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD09A1)            
+            
 Corn yield and export data was taken from [USDA NASS](https://www.nass.usda.gov/Quick_Stats/Lite/index.php)     
 
 Credits to [Thanaphong Phongpreecha](https://github.com/tpjoe/SpringBoard) for code for preprocessing satellite images from Google Earth Enginer. 
